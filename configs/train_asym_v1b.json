@@ -1,0 +1,87 @@
+{
+  "comfy": {
+    "unet_name": "anima-base-v1.0.safetensors",
+    "clip_name": "qwen_3_06b_base.safetensors",
+    "vae_name": "qwen_image_vae.safetensors"
+  },
+  "data": {
+    "eval_characters": 32,
+    "seen_eval_groups": 8,
+    "prompt_mix": {
+      "stripped": 0.68,
+      "partial": 0.24,
+      "minimal": 0.08
+    },
+    "char_prompt_mix": {
+      "with_artist": 0.85,
+      "stripped": 0.15
+    },
+    "partial_keep": [
+      0.3,
+      0.7
+    ],
+    "cross_weight": 2.0,
+    "ref_caption_p": 0.7,
+    "dropout": {
+      "ref": 0.1,
+      "text": 0.05,
+      "both": 0.05
+    },
+    "preserve_weight": 0.1
+  },
+  "adapter": {
+    "lora": {
+      "ref": {
+        "rank": 256,
+        "alpha": 256,
+        "targets": [
+          "self_attn.q_proj",
+          "self_attn.k_proj",
+          "self_attn.v_proj",
+          "self_attn.output_proj",
+          "mlp.layer1",
+          "mlp.layer2",
+          "cross_attn.q_proj",
+          "cross_attn.output_proj"
+        ]
+      },
+      "tgt": {
+        "rank": 128,
+        "alpha": 128,
+        "targets": [
+          "self_attn.q_proj",
+          "self_attn.k_proj",
+          "self_attn.v_proj",
+          "self_attn.output_proj",
+          "mlp.layer1",
+          "mlp.layer2"
+        ]
+      }
+    },
+    "modes": {
+      "cs": 0.75,
+      "char": 0.25
+    },
+    "ref_offset_max": 32
+  },
+  "train": {
+    "steps": 10000,
+    "batch_size": 4,
+    "grad_accum": 1,
+    "lr": 0.0001,
+    "warmup": 300,
+    "min_lr_ratio": 0.1,
+    "weight_decay": 0.0,
+    "grad_clip": 1.0,
+    "shift": 3.0,
+    "seed": 20261029,
+    "checkpoint_blocks": 10,
+    "log_every": 20,
+    "save_every": 500,
+    "eval_every": 500
+  },
+  "sample": {
+    "steps": 28,
+    "cfg": 4.5
+  }
+}
