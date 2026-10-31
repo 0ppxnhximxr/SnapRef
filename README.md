@@ -132,6 +132,20 @@ Data generation and training of v1a together took about 120 H100 GPU-hours.
   outfit-change pairs and multi-resolution training. Goal: better results with real artwork as the reference and
   finer details (accessories, patterns, skin tone).
 
+## Compatibility and troubleshooting
+
+- **Black image with an fp16 model or `--fast`.** Fixed in the node update of 2026-10-31. Anima overflows in
+  fp16. ComfyUI runs the model in fp16 when the checkpoint is stored in fp16 (many merges), with `--fp16-unet`,
+  or with `--fast` / `--fast fp16_accumulation`. The old node encoded the reference in fp16 there and produced NaN.
+  The new node keeps that part in fp32, as ComfyUI itself does. bf16 output is unchanged (same bits). With the
+  old node, add `--bf16-unet` to the ComfyUI launch arguments, or drop `fp16_accumulation` from `--fast`.
+- **Anzhc Mod Guidance:** works in either node order with the updated node. Before, applying Mod Guidance first
+  dropped the reference.
+- **Spectrum:** works with `ref_guidance_on` off. With it on, Spectrum-type step forecasting breaks; the node now
+  logs a warning.
+- **sorryhyun Mod Guidance:** with the default settings it can stop with a tensor-size error (4 vs 2). Turning on
+  `ref_in_uncond` or `ref_guidance_on` avoids it.
+
 ## Known limitations
 
 - Very small details (earrings, fine patterns, scars) can be simplified.

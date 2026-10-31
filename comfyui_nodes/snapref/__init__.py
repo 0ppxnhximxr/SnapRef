@@ -166,7 +166,8 @@ def _encode_reference(adapter: _Adapter, dm, ref, context, target_hw, mode: str)
     _set_attn_state(dm, {"record": record})
     _STATE.update(adapter=adapter, stream="ref")
     try:
-        x = x_emb
+        # as MiniTrainDIT.forward: fp32 residual stream under fp16 compute (fp16 overflows -> NaN K/V -> black image)
+        x = x_emb.float() if x_emb.dtype == torch.float16 else x_emb
         for block in dm.blocks:
             x = block(x, t_emb, context, rope_emb_L_1_1_D=rope.unsqueeze(1).unsqueeze(0), adaln_lora_B_T_3D=adaln,
                       extra_per_block_pos_emb=None, transformer_options={})
@@ -247,6 +248,8 @@ def _make_ref_guidance(ref_guidance: float, correction: str, ref_end: float):
     """Post-CFG: guided = base + rg * (uncond_ref - base) + cfg * (cond_ref - uncond_ref), base = uncond without
     the reference (one extra model call per step, until ref_end). KSampler's CFG already gives
     uncond_ref + cfg * (cond_ref - uncond_ref), so add (rg - 1) * (uncond_ref - base)."""
+    warned = []
+
     def post_cfg(args):
         guided, pos = args["denoised"], args["cond_denoised"]
         ms = args["model"].model_sampling
@@ -254,6 +257,11 @@ def _make_ref_guidance(ref_guidance: float, correction: str, ref_end: float):
             cond, ref = (args["uncond"], args["uncond_denoised"]) if args["uncond"] is not None else (args["cond"], pos)
             options = args["model_options"].copy()
             options["transformer_options"] = {**options.get("transformer_options", {}), NO_REF_KEY: True}
+            if "model_function_wrapper" in options and not warned:
+                # kept on purpose: Layer Replay also lives there, and the extra call needs it; Spectrum counts calls
+                logging.warning("[SnapRef] ref_guidance_on with a model_function_wrapper (Spectrum, Layer Replay ...): "
+                                "Spectrum-type forecasting breaks on the extra call; turn ref_guidance_on off with Spectrum")
+                warned.append(True)
             (base,) = comfy.samplers.calc_cond_batch(args["model"], [cond], args["input"], args["sigma"], options)
             guided = guided + (ref_guidance - 1.0) * (ref - base)
         return _correct(guided, pos, correction)
@@ -322,6 +330,9 @@ class SnapRef:
         m = model.clone()
         m.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, WRAPPER_KEY,
                                _make_wrapper(ad, latent, cond, mode, ref_in_uncond or ref_guidance_on, strength))
+        # outermost: a wrapper that runs the blocks itself without calling executor (Anzhc Mod Guidance) would skip ours
+        dm_wrappers = m.wrappers[comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL]
+        m.wrappers[comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL] = {WRAPPER_KEY: dm_wrappers.pop(WRAPPER_KEY), **dm_wrappers}
         m.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, WRAPPER_KEY, _make_outer(ad))
         if ref_guidance_on:
             m.set_model_sampler_post_cfg_function(_make_ref_guidance(ref_guidance, correction, ref_end))
